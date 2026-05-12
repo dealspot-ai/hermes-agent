@@ -71,7 +71,9 @@ def expand_whatsapp_aliases(identifier: str) -> Set[str]:
     """Resolve WhatsApp phone/LID aliases via bridge session mapping files.
 
     Returns the set of all identifiers transitively reachable through the
-    bridge's ``$HERMES_HOME/whatsapp/session/lid-mapping-*.json`` files,
+    bridge's ``$HERMES_HOME/platforms/whatsapp/session/lid-mapping-*.json``
+    files, with a fallback to the legacy ``$HERMES_HOME/whatsapp/session``
+    location,
     starting from ``identifier``. The result always includes the
     normalized input itself, so callers can safely ``in`` check against
     the return value without a separate fallback branch.
@@ -82,7 +84,11 @@ def expand_whatsapp_aliases(identifier: str) -> Set[str]:
     if not normalized:
         return set()
 
-    session_dir = get_hermes_home() / "whatsapp" / "session"
+    hermes_home = get_hermes_home()
+    session_dirs = (
+        hermes_home / "platforms" / "whatsapp" / "session",
+        hermes_home / "whatsapp" / "session",
+    )
     resolved: Set[str] = set()
     queue = [normalized]
 
@@ -102,19 +108,20 @@ def expand_whatsapp_aliases(identifier: str) -> Set[str]:
             continue
 
         resolved.add(current)
-        for suffix in ("", "_reverse"):
-            mapping_path = session_dir / f"lid-mapping-{current}{suffix}.json"
-            if not mapping_path.exists():
-                continue
-            try:
-                mapped = normalize_whatsapp_identifier(
-                    json.loads(mapping_path.read_text(encoding="utf-8"))
-                )
-            except (OSError, json.JSONDecodeError) as exc:
-                logger.debug("whatsapp_identity: failed to read %s: %s", mapping_path, exc)
-                continue
-            if mapped and mapped not in resolved:
-                queue.append(mapped)
+        for session_dir in session_dirs:
+            for suffix in ("", "_reverse"):
+                mapping_path = session_dir / f"lid-mapping-{current}{suffix}.json"
+                if not mapping_path.exists():
+                    continue
+                try:
+                    mapped = normalize_whatsapp_identifier(
+                        json.loads(mapping_path.read_text(encoding="utf-8"))
+                    )
+                except (OSError, json.JSONDecodeError) as exc:
+                    logger.debug("whatsapp_identity: failed to read %s: %s", mapping_path, exc)
+                    continue
+                if mapped and mapped not in resolved:
+                    queue.append(mapped)
 
     return resolved
 

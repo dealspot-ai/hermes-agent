@@ -242,6 +242,51 @@ class TestGetDisabledSkillNames:
         result = get_disabled_skill_names()
         assert result == {"global-skill"}
 
+    def test_user_disabled_adds_to_platform_disabled(self, tmp_path, monkeypatch):
+        """skills.user_disabled.<platform>.<user_id> should deny extra skills for that sender."""
+        config = tmp_path / "config.yaml"
+        config.write_text(
+            "skills:\n"
+            "  disabled:\n"
+            "    - global-skill\n"
+            "  platform_disabled:\n"
+            "    whatsapp:\n"
+            "      - whatsapp-skill\n"
+            "  user_disabled:\n"
+            "    whatsapp:\n"
+            "      '61423618372':\n"
+            "        - wiki\n"
+        )
+        monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+        monkeypatch.delenv("HERMES_PLATFORM", raising=False)
+        monkeypatch.delenv("HERMES_SESSION_PLATFORM", raising=False)
+        monkeypatch.delenv("HERMES_SESSION_USER_ID", raising=False)
+
+        from agent.skill_utils import get_disabled_skill_names
+        result = get_disabled_skill_names(platform="whatsapp", user_id="61423618372")
+        assert result == {"whatsapp-skill", "wiki"}
+
+    def test_user_disabled_uses_session_user_id(self, tmp_path, monkeypatch):
+        """Gateway session user id should drive per-user skill denies automatically."""
+        config = tmp_path / "config.yaml"
+        config.write_text(
+            "skills:\n"
+            "  disabled:\n"
+            "    - global-skill\n"
+            "  user_disabled:\n"
+            "    whatsapp:\n"
+            "      '61423618372':\n"
+            "        - wiki\n"
+        )
+        monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+        monkeypatch.setenv("HERMES_SESSION_PLATFORM", "whatsapp")
+        monkeypatch.setenv("HERMES_SESSION_USER_ID", "61423618372")
+        monkeypatch.delenv("HERMES_PLATFORM", raising=False)
+
+        from agent.skill_utils import get_disabled_skill_names
+        result = get_disabled_skill_names()
+        assert result == {"global-skill", "wiki"}
+
 
 # ---------------------------------------------------------------------------
 # _find_all_skills — disabled filtering

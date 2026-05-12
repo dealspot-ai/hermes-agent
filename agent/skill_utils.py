@@ -272,7 +272,10 @@ def skill_matches_environment(frontmatter: Dict[str, Any]) -> bool:
 # ── Disabled skills ───────────────────────────────────────────────────────
 
 
-def get_disabled_skill_names(platform: str | None = None) -> Set[str]:
+def get_disabled_skill_names(
+    platform: str | None = None,
+    user_id: str | None = None,
+) -> Set[str]:
     """Read disabled skill names from config.yaml.
 
     Args:
@@ -280,6 +283,10 @@ def get_disabled_skill_names(platform: str | None = None) -> Set[str]:
             *None*, resolves from ``HERMES_PLATFORM`` or
             ``HERMES_SESSION_PLATFORM`` env vars.  Falls back to the
             global disabled list when no platform is determined.
+        user_id: Explicit gateway sender id. When *None*, resolves from
+            ``HERMES_SESSION_USER_ID``. If configured,
+            ``skills.user_disabled.<platform>.<user_id>`` is added to the
+            effective global/per-platform disabled list.
 
     Reads the config file directly (no CLI config imports) to stay
     lightweight.
@@ -305,12 +312,26 @@ def get_disabled_skill_names(platform: str | None = None) -> Set[str]:
         or os.getenv("HERMES_PLATFORM")
         or get_session_env("HERMES_SESSION_PLATFORM")
     )
+    resolved_user_id = user_id or get_session_env("HERMES_SESSION_USER_ID")
+
     if resolved_platform:
         platform_disabled = (skills_cfg.get("platform_disabled") or {}).get(
             resolved_platform
         )
         if platform_disabled is not None:
-            return _normalize_string_set(platform_disabled)
+            disabled = _normalize_string_set(platform_disabled)
+        else:
+            disabled = _normalize_string_set(skills_cfg.get("disabled"))
+
+        user_disabled_cfg = skills_cfg.get("user_disabled") or {}
+        if isinstance(user_disabled_cfg, dict) and resolved_user_id:
+            platform_user_disabled = user_disabled_cfg.get(resolved_platform) or {}
+            if isinstance(platform_user_disabled, dict):
+                disabled |= _normalize_string_set(
+                    platform_user_disabled.get(str(resolved_user_id))
+                )
+        return disabled
+
     return _normalize_string_set(skills_cfg.get("disabled"))
 
 
